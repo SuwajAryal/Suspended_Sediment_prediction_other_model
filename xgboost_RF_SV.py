@@ -23,8 +23,11 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
 from sklearn.metrics import r2_score, mean_squared_error
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import ElasticNet
 from sklearn.svm import SVR
 from xgboost import XGBRegressor
+from lightgbm import LGBMRegressor
+from catboost import CatBoostRegressor
 
 warnings.filterwarnings("ignore")
 
@@ -245,6 +248,28 @@ def main():
             n_jobs=-1,
             tree_method="hist",
         ),
+        "LightGBM": LGBMRegressor(
+            objective="regression",
+            n_estimators=700,
+            learning_rate=0.03,
+            max_depth=6,
+            num_leaves=31,
+            subsample=0.85,
+            colsample_bytree=0.85,
+            random_state=SEED,
+            n_jobs=-1,
+            metric="rmse",
+            verbosity=-1,
+        ),
+        "CatBoost": CatBoostRegressor(
+            iterations=700,
+            learning_rate=0.03,
+            depth=6,
+            loss_function="RMSE",
+            verbose=False,
+            random_state=SEED,
+            thread_count=-1,
+        ),
         "RandomForest": RandomForestRegressor(
             n_estimators=500,
             max_depth=18,
@@ -254,7 +279,8 @@ def main():
             random_state=SEED,
             n_jobs=-1,
         ),
-        "SVR": SVR(kernel="rbf", C=8.0, epsilon=0.05, gamma="scale")
+        "SVR": SVR(kernel="rbf", C=8.0, epsilon=0.05, gamma="scale"),
+        "ElasticNet": ElasticNet(alpha=0.5, l1_ratio=0.5, max_iter=2000, random_state=SEED)
     }
     
     results_list = []
