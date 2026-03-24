@@ -70,7 +70,8 @@ ENABLE_HPARAM_SEARCH = False
 MAX_SEARCH_TRIALS = 16
 
 BASE_FEATURES = [
-    "Q_m3s", "d50_mm", "rainfall_mm", "temp_C", "VS", "Soil_Moisture", "NDVI",
+    "Q_m3s", "Q_m3s_sq", "Q_m3s_cube", "Stream_Power_Gross",
+    "d50_mm", "rainfall_mm", "temp_C", "VS", "Soil_Moisture", "NDVI",
     "dQ", "Q_ratio", "Q_lag1", "Q_lag2", "Q_lag3", "Q_max_7d", "HI_proxy",
     "API", "P_MA3", "P_MA7", "P_MA14", "P_MA30", "SPI_30"
 ]
@@ -128,10 +129,13 @@ class DataProcessor:
         df = df.sort_values("date_dt").reset_index(drop=True)
 
         df["VS"] = (df["Q_m3s"] * df["slope"]) / (df["width_m"] * df["depth_m"])
+        df["Stream_Power_Gross"] = df["Q_m3s"] * df["slope"]
         for col in ("Soil_Moisture", "NDVI"):
             if col not in df.columns: df[col] = 0.0
 
         Q = df["Q_m3s"]
+        df["Q_m3s_sq"] = Q ** 2
+        df["Q_m3s_cube"] = Q ** 3
         df["dQ"] = Q.diff().fillna(0.0)
         q7 = Q.rolling(7, min_periods=1).mean()
         df["Q_ratio"] = (Q / q7.replace(0, np.nan)).fillna(1.0)
@@ -164,6 +168,8 @@ class DataProcessor:
 
         df["SSC_lag1"] = df[TARGET_COL].shift(1).ffill().fillna(0.0)
         df["SSC_lag2"] = df[TARGET_COL].shift(2).ffill().fillna(0.0)
+        df["SSC_lag3"] = df[TARGET_COL].shift(3).ffill().fillna(0.0)
+        df["SSC_lag7"] = df[TARGET_COL].shift(7).ffill().fillna(0.0)
 
         df = df.dropna(subset=[TARGET_COL]).reset_index(drop=True)
         df["WY"] = df["date_dt"].apply(self._nepali_wy)
@@ -387,7 +393,7 @@ def main():
         raise FileNotFoundError(f"Data file not found: {DATA_PATH}.")
     proc = DataProcessor(DATA_PATH)
     
-    feats = BASE_FEATURES + ["SSC_lag1", "SSC_lag2"]
+    feats = BASE_FEATURES + ["SSC_lag1", "SSC_lag2", "SSC_lag3", "SSC_lag7"]
     cfg = pick_config(proc, feats)
     print(
         f"\n[RUN] Training Baseline LSTM with {len(feats)} features | "
