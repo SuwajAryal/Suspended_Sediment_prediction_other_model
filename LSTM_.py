@@ -231,22 +231,28 @@ class DataProcessor:
         )
         return DataLoader(ds, batch_size=batch_size, shuffle=shuffle)
 
-# --- MODEL: PLAIN LSTM ---
+# --- MODEL: OPTIMIZED LSTM ---
 class LSTM_Baseline(nn.Module):
-    def __init__(self, in_dim, hidden_dim=64, num_layers=2, dropout=0.1):
+    def __init__(self, in_dim, hidden_dim=128, num_layers=3, dropout=0.1):
         super().__init__()
         self.lstm = nn.LSTM(
             input_size=in_dim, 
             hidden_size=hidden_dim, 
             num_layers=num_layers, 
             batch_first=True, 
-            bidirectional=False,
+            bidirectional=True,
             dropout=dropout
         )
 
+        self.attention = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.Tanh(),
+            nn.Linear(hidden_dim, 1)
+        )
+
         self.head = nn.Sequential(
-            nn.Linear(hidden_dim, 64),
-            nn.BatchNorm1d(64),
+            nn.Linear(hidden_dim * 2, 64),
+            nn.LayerNorm(64),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(64, 1)
@@ -254,7 +260,15 @@ class LSTM_Baseline(nn.Module):
 
     def forward(self, x):
         out, _ = self.lstm(x)
-        y_pred = self.head(out[:, -1, :])
+        
+        # Attention Mechanism
+        attn_weights = self.attention(out)
+        attn_weights = torch.softmax(attn_weights, dim=1)
+        
+        # Apply attention weights to sequence outputs
+        context = torch.sum(attn_weights * out, dim=1)
+        
+        y_pred = self.head(context)
         return y_pred
 
 # --- PURE DATA-DRIVEN TRAINING ---
@@ -310,11 +324,11 @@ def train_model(model, loaders, y_scaler, lr=LR, weight_decay=WEIGHT_DECAY):
 
 def build_search_space():
     seq_lens = [21, 30, 45, 60]
-    hidden_dims = [64, 96]
-    num_layers = [1, 2]
+    hidden_dims = [64, 96, 128]
+    num_layers = [1, 2, 3]
     lrs = [3e-4, 1e-3]
     batch_sizes = [32, 64]
-    dropouts = [0.1]
+    dropouts = [0.1, 0.2]
     weight_decays = [5e-5, 1e-4]
 
     grid = []
@@ -335,8 +349,8 @@ def pick_config(proc, feats):
     if not ENABLE_HPARAM_SEARCH:
         return {
             "seq_len": SEQ_LEN,
-            "hidden_dim": 64,
-            "num_layers": 2,
+            "hidden_dim": 128,
+            "num_layers": 3,
             "lr": LR,
             "batch_size": BATCH_SIZE,
             "dropout": 0.1,
